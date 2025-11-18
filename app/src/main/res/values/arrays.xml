@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="cycle_length_options">
+        <item>3天循环</item>
+        <item>4天循环</item>
+        <item>5天循环</item>
+        <item>6天循环</item>
+        <item>7天循环</item>
+    </string-array>
+</resources>
