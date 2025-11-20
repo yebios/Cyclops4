@@ -1,0 +1,55 @@
+# Git Commit Message
+
+## 修复 Today Tab 状态管理、"Habit not found"错误和 UI 更新问题
+
+### 问题描述
+1. 在"今日"界面点击待完成任务时弹出"Habit not found"错误
+2. 从习惯详情页返回后，已完成的任务被错误地重置为未完成状态
+3. 点击完成任务后，UI 不更新（任务不消失，进度不变）🆕
+
+### 根本原因
+- TodayViewModel 在后台线程使用 LiveData.getValue() 导致返回 null
+- HabitViewModel 过度使用 observeForever 导致观察者泄漏和重复处理
+- 不必要的手动数据刷新干扰了 Room LiveData 的自动更新机制
+- RoomHabitRepository.completeDay() 只更新 day_tasks 表，未同步更新 habit_cycles 表的 dayTasks JSON 字段 🆕
+
+### 修复内容
+
+#### TodayViewModel.java
+- 添加 allHabitsLiveData 字段跟踪 LiveData 源，正确管理观察者生命周期
+- 使用同步方法 getHabitCycleByIdSync() 替代 LiveData.getValue()
+- 改进任务处理逻辑，区分显示任务和待完成任务
+- 添加详细日志便于调试
+
+#### HabitViewModel.java
+- 直接暴露 Repository 的 LiveData，移除不必要的 MutableLiveData 包装
+- 删除 loadAllHabits() 方法，依赖 Room LiveData 自动更新
+- 移除所有操作后的手动刷新调用
+
+#### RoomHabitRepository.java
+- 添加 getHabitCycleByIdSync() 同步方法供后台线程使用
+- 移除不必要的 loadAllHabitsFromDatabase() 方法和调用
+
+#### HabitListFragment.java
+- 移除 onResume() 中的手动刷新调用
+
+### 技术改进
+- 遵循 LiveData 最佳实践，避免观察者泄漏
+- 正确使用 Room 的自动更新机制
+- 改善多线程数据访问安全性
+
+### 测试
+- ✅ 构建成功 (BUILD SUCCESSFUL)
+- ✅ 无编译错误
+- 详细测试清单见 test-checklist.md
+
+### 相关文件
+- fix-summary.md - 详细修复说明
+- test-checklist.md - 完整测试清单
+- FIXES.md - 快速修复概览
+- plan-fixTodayHabits.prompt.md - 原始修复计划
+
+---
+
+Fixes #[issue-number] (如果有 issue 的话)
+

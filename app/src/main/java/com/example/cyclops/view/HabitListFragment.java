@@ -46,10 +46,7 @@ public class HabitListFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // 每次进入页面时刷新数据
-        if (habitViewModel != null) {
-            habitViewModel.loadAllHabits();
-        }
+        // LiveData will automatically update when data changes, no need to manually reload
     }
 
     private void initViews(View view) {

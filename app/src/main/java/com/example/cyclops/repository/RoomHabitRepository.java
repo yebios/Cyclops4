@@ -125,6 +125,19 @@ public class RoomHabitRepository implements HabitRepository {
         );
     }
 
+    /**
+     * Synchronous method to get HabitCycle by ID - for use in background threads only
+     */
+    public HabitCycle getHabitCycleByIdSync(String habitId) {
+        try {
+            HabitCycleEntity entity = habitCycleDao.getHabitCycleByIdSync(habitId);
+            return Mapper.toHabitCycle(entity);
+        } catch (Exception e) {
+            android.util.Log.e("RoomHabitRepository", "Error getting habit by ID: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
     @Override
     public void completeDay(String habitId, int dayNumber) {
         executor.execute(() -> {
@@ -136,23 +149,31 @@ public class RoomHabitRepository implements HabitRepository {
                 if (entity != null) {
                     android.util.Log.d("RoomHabitRepository", "找到习惯: " + entity.name + ", 当前连续天数: " + entity.currentStreak + ", 总完成次数: " + entity.totalCompletions);
 
-                    // 更新任务完成状态
+                    // 关键修复：更新 entity 中的 dayTasks 列表的完成状态
+                    if (entity.dayTasks != null && !entity.dayTasks.isEmpty()) {
+                        for (com.example.cyclops.database.entity.DayTaskEntity task : entity.dayTasks) {
+                            if (task.dayNumber == dayNumber) {
+                                task.completed = true;
+                                android.util.Log.d("RoomHabitRepository", "更新任务完成状态: 第" + dayNumber + "天");
+                                break;
+                            }
+                        }
+                    }
+
+                    // 更新整个 entity（包含更新后的 dayTasks）
+                    entity.currentStreak = entity.currentStreak + 1;
+                    entity.totalCompletions = entity.totalCompletions + 1;
+                    entity.lastCompletionDate = new java.util.Date();
+                    entity.updatedAt = new java.util.Date();
+
+                    habitCycleDao.update(entity);
+                    android.util.Log.d("RoomHabitRepository", "更新习惯实体完成");
+
+                    // 同时更新 day_tasks 表（如果使用的话）
                     dayTaskDao.updateDayTaskCompletion(habitId, dayNumber, true);
-                    android.util.Log.d("RoomHabitRepository", "更新任务完成状态完成");
+                    android.util.Log.d("RoomHabitRepository", "更新 day_tasks 表完成");
 
-                    // 增加完成次数
-                    habitCycleDao.incrementCompletions(habitId, new java.util.Date());
-                    android.util.Log.d("RoomHabitRepository", "增加完成次数完成");
-
-                    // 更新连续天数
-                    int newStreak = entity.currentStreak + 1;
-                    habitCycleDao.updateStreak(habitId, newStreak, new java.util.Date());
-                    android.util.Log.d("RoomHabitRepository", "更新连续天数: " + newStreak);
-
-                    android.util.Log.d("RoomHabitRepository", "完成任务成功: " + entity.name + " 第" + dayNumber + "天, 新连续天数: " + newStreak);
-
-                    // 强制刷新数据
-                    loadAllHabitsFromDatabase();
+                    android.util.Log.d("RoomHabitRepository", "完成任务成功: " + entity.name + " 第" + dayNumber + "天, 新连续天数: " + entity.currentStreak);
                 } else {
                     android.util.Log.e("RoomHabitRepository", "未找到习惯: " + habitId);
                     errorLiveData.postValue("未找到习惯: " + habitId);
@@ -164,17 +185,6 @@ public class RoomHabitRepository implements HabitRepository {
         });
     }
 
-    private void loadAllHabitsFromDatabase() {
-        // 强制重新加载所有习惯数据
-        LiveData<List<HabitCycleEntity>> habitsLiveData = habitCycleDao.getAllHabitCycles(TEMP_USER_ID);
-        habitsLiveData.observeForever(new androidx.lifecycle.Observer<List<HabitCycleEntity>>() {
-            @Override
-            public void onChanged(List<HabitCycleEntity> habits) {
-                // 数据已更新，移除观察者
-                habitsLiveData.removeObserver(this);
-            }
-        });
-    }
 
     @Override
     public LiveData<List<HabitCycle>> getPopularHabitCycles() {

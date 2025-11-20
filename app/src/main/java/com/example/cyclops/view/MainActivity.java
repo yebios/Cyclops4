@@ -39,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private void setupViewPager() {
         MainPagerAdapter pagerAdapter = new MainPagerAdapter(this);
         viewPager.setAdapter(pagerAdapter);
+        viewPager.setOffscreenPageLimit(4); // 保留所有 Fragment 实例
 
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override

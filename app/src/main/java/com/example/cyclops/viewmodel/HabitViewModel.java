@@ -16,17 +16,17 @@ import java.util.List;
 public class HabitViewModel extends AndroidViewModel {
 
     private HabitRepository habitRepository;
-    private MutableLiveData<List<HabitCycle>> habitsLiveData;
+    private LiveData<List<HabitCycle>> habitsLiveData;
     private MutableLiveData<HabitCycle> selectedHabitLiveData;
     private MutableLiveData<String> errorMessageLiveData;
+    private String currentSelectedHabitId;
 
     public HabitViewModel(Application application) {
         super(application);
         this.habitRepository = RoomHabitRepository.getInstance(application);
-        this.habitsLiveData = new MutableLiveData<>();
+        this.habitsLiveData = habitRepository.getAllHabitCycles();
         this.selectedHabitLiveData = new MutableLiveData<>();
         this.errorMessageLiveData = new MutableLiveData<>();
-        loadAllHabits();
     }
 
     public LiveData<List<HabitCycle>> getHabitsLiveData() {
@@ -41,34 +41,23 @@ public class HabitViewModel extends AndroidViewModel {
         return errorMessageLiveData;
     }
 
-    public void loadAllHabits() {
-        LiveData<List<HabitCycle>> habitsLiveDataFromRepo = habitRepository.getAllHabitCycles();
-        habitsLiveDataFromRepo.observeForever(new androidx.lifecycle.Observer<List<HabitCycle>>() {
-            @Override
-            public void onChanged(List<HabitCycle> habits) {
-                habitsLiveData.setValue(habits);
-                // 移除观察者避免内存泄漏
-                habitsLiveDataFromRepo.removeObserver(this);
-            }
-        });
-    }
-
     public void addHabitCycle(HabitCycle habitCycle) {
         habitRepository.addHabitCycle(habitCycle);
-        loadAllHabits();
+        // No need to call loadAllHabits() - LiveData will update automatically
     }
 
     public void updateHabitCycle(HabitCycle habitCycle) {
         habitRepository.updateHabitCycle(habitCycle);
-        loadAllHabits();
+        // No need to call loadAllHabits() - LiveData will update automatically
     }
 
     public void deleteHabitCycle(String habitId) {
         habitRepository.deleteHabitCycle(habitId);
-        loadAllHabits();
+        // No need to call loadAllHabits() - LiveData will update automatically
     }
 
     public void selectHabitCycle(String habitId) {
+        currentSelectedHabitId = habitId;
         LiveData<HabitCycle> habitLiveData = habitRepository.getHabitCycleById(habitId);
         habitLiveData.observeForever(new androidx.lifecycle.Observer<HabitCycle>() {
             @Override
@@ -84,10 +73,11 @@ public class HabitViewModel extends AndroidViewModel {
 
     public void completeDay(String habitId, int dayNumber) {
         habitRepository.completeDay(habitId, dayNumber);
-        // 重新加载数据
-        loadAllHabits();
-        // 重新选择当前习惯
-        selectHabitCycle(habitId);
+        // LiveData will automatically update when database changes
+        // Re-select current habit to update the detail view
+        if (habitId.equals(currentSelectedHabitId)) {
+            selectHabitCycle(habitId);
+        }
     }
 
     public int getCurrentDayForHabit(HabitCycle habitCycle) {
