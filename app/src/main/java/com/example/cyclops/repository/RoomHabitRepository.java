@@ -5,7 +5,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Transformations;
 
-import com.example.cyclops.R; // 确保引入R文件
+import com.example.cyclops.R;
 import com.example.cyclops.database.AppDatabase;
 import com.example.cyclops.database.dao.DayTaskDao;
 import com.example.cyclops.database.dao.HabitCycleDao;
@@ -24,14 +24,12 @@ public class RoomHabitRepository implements HabitRepository {
     private final DayTaskDao dayTaskDao;
     private final Executor executor;
     private final MutableLiveData<String> errorLiveData;
-
-    // [新增] 保存 Application 上下文以获取资源
     private final Application application;
 
     private static final String CURRENT_USER_ID = "";
 
     private RoomHabitRepository(Application application) {
-        this.application = application; // 赋值
+        this.application = application;
         AppDatabase database = AppDatabase.getInstance(application);
         this.habitCycleDao = database.habitCycleDao();
         this.dayTaskDao = database.dayTaskDao();
@@ -61,7 +59,6 @@ public class RoomHabitRepository implements HabitRepository {
                     dayTaskDao.insertAll(entity.dayTasks);
                 }
             } catch (Exception e) {
-                // [修改] 使用 application.getString()
                 String msg = application.getString(R.string.error_add_habit, e.getMessage());
                 errorLiveData.postValue(msg);
             }
@@ -76,7 +73,6 @@ public class RoomHabitRepository implements HabitRepository {
                 HabitCycleEntity entity = Mapper.toHabitCycleEntity(habitCycle);
                 habitCycleDao.update(entity);
             } catch (Exception e) {
-                // [修改]
                 String msg = application.getString(R.string.error_update_habit, e.getMessage());
                 errorLiveData.postValue(msg);
             }
@@ -91,7 +87,6 @@ public class RoomHabitRepository implements HabitRepository {
                 entity.id = habitId;
                 habitCycleDao.delete(entity);
             } catch (Exception e) {
-                // [修改]
                 String msg = application.getString(R.string.error_delete_habit, e.getMessage());
                 errorLiveData.postValue(msg);
             }
@@ -127,21 +122,47 @@ public class RoomHabitRepository implements HabitRepository {
                 HabitCycleEntity entity = habitCycleDao.getHabitCycleByIdSync(habitId);
 
                 if (entity != null) {
-                    entity.currentStreak = entity.currentStreak + 1;
-                    if (entity.currentStreak > entity.bestStreak) {
-                        entity.bestStreak = entity.currentStreak;
+                    HabitCycle tempModel = Mapper.toHabitCycle(entity);
+
+                    // 1. 防止重复打卡
+                    boolean isCompletedToday = com.example.cyclops.HabitCycleEngine.isCompletedToday(tempModel);
+
+                    if (!isCompletedToday) {
+                        // 2. 计算 Streak (断签重置)
+                        if (com.example.cyclops.HabitCycleEngine.wasCompletedYesterday(tempModel)) {
+                            // 昨天打了 -> 连击+1
+                            entity.currentStreak = entity.currentStreak + 1;
+                        } else {
+                            // 断签了 -> 重置为1
+                            entity.currentStreak = 1;
+                        }
+
+                        // 3. 更新最佳连续
+                        if (entity.currentStreak > entity.bestStreak) {
+                            entity.bestStreak = entity.currentStreak;
+                        }
+
+                        // 4. [核心修改] 计算循环完成次数 (Total Completions)
+                        // 逻辑：只有当连续打卡数 (Streak) 是周期长度的整数倍时，才算完成了一个完整循环。
+                        // 例如：周期4天。
+                        // Streak = 4 -> 完成1次
+                        // Streak = 8 -> 完成2次
+                        // Streak = 1 (断签重置后) -> 不增加完成次数
+                        if (entity.currentStreak > 0 && entity.currentStreak % entity.cycleLength == 0) {
+                            entity.totalCompletions = entity.totalCompletions + 1;
+                            android.util.Log.d("Repository", "恭喜！完成了一个完整的循环！");
+                        }
+
+                        // 5. 更新时间
+                        entity.lastCompletionDate = new java.util.Date();
+                        entity.updatedAt = new java.util.Date();
+
+                        // 6. 保存
+                        habitCycleDao.update(entity);
+                        dayTaskDao.updateDayTaskCompletion(habitId, dayNumber, true);
                     }
-                    entity.totalCompletions = entity.totalCompletions + 1;
-                    entity.lastCompletionDate = new java.util.Date();
-                    entity.updatedAt = new java.util.Date();
-
-                    habitCycleDao.update(entity);
-                    dayTaskDao.updateDayTaskCompletion(habitId, dayNumber, true);
-
-                    // 可以在 Log 中记录成功，但无需通知 UI 错误
                 }
             } catch (Exception e) {
-                // [修改]
                 String msg = application.getString(R.string.error_complete_task, e.getMessage());
                 errorLiveData.postValue(msg);
             }

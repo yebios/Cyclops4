@@ -4,53 +4,72 @@ import android.app.Application;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Transformations;
+
 import com.example.cyclops.HabitCycleEngine;
-import com.example.cyclops.model.DayTask;
 import com.example.cyclops.model.HabitCycle;
 import com.example.cyclops.repository.HabitRepository;
 import com.example.cyclops.repository.RoomHabitRepository;
-import java.util.ArrayList;
+
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 public class TodayViewModel extends AndroidViewModel {
 
-    private HabitRepository habitRepository;
-    private MutableLiveData<List<HabitCycle>> todayHabitsLiveData;
-    private MutableLiveData<String> errorMessageLiveData;
-    private MutableLiveData<Integer> completedCountLiveData;
-    private MutableLiveData<Integer> totalCountLiveData;
-    private androidx.lifecycle.Observer<List<HabitCycle>> habitsObserver;
-    private LiveData<List<HabitCycle>> allHabitsLiveData;
-    private Executor executor;
+    private final HabitRepository habitRepository;
+    private final LiveData<List<HabitCycle>> allHabitsLiveData;
+
+    // 这些 LiveData 会根据 allHabitsLiveData 自动更新
+    private final LiveData<List<HabitCycle>> todayHabitsLiveData;
+    private final LiveData<Integer> completedCountLiveData;
+    private final LiveData<Integer> totalCountLiveData;
+
+    private final MutableLiveData<String> errorMessageLiveData;
+    private final Executor executor;
 
     public TodayViewModel(Application application) {
         super(application);
         this.habitRepository = RoomHabitRepository.getInstance(application);
-        this.todayHabitsLiveData = new MutableLiveData<>();
-        this.errorMessageLiveData = new MutableLiveData<>();
-        this.completedCountLiveData = new MutableLiveData<>();
-        this.totalCountLiveData = new MutableLiveData<>();
         this.executor = Executors.newSingleThreadExecutor();
-        setupHabitsObserver();
-        loadTodayHabits();
-    }
+        this.errorMessageLiveData = new MutableLiveData<>();
 
-    private void setupHabitsObserver() {
-        habitsObserver = allHabits -> {
-            if (allHabits != null) {
-                processAndUpdateTodayHabits(allHabits);
+        // 1. 获取源数据 (所有习惯)
+        this.allHabitsLiveData = habitRepository.getAllHabitCycles();
+
+        // 2. [核心修改] 自动计算今日任务列表
+        // 目前逻辑：所有习惯在每一天都有任务，所以"今日列表"等于"所有习惯"
+        // 如果以后有"休息日"逻辑，可以在这里过滤
+        this.todayHabitsLiveData = allHabitsLiveData;
+
+        // 3. [核心修改] 自动计算总任务数 (基于列表大小)
+        this.totalCountLiveData = Transformations.map(allHabitsLiveData, habits ->
+                habits != null ? habits.size() : 0
+        );
+
+        // 4. [核心修改] 自动计算已完成数 (基于 isCompletedToday)
+        // 只要数据库更新，这个逻辑就会重新运行，进度条就会自动更新
+        this.completedCountLiveData = Transformations.map(allHabitsLiveData, habits -> {
+            int count = 0;
+            if (habits != null) {
+                for (HabitCycle habit : habits) {
+                    if (HabitCycleEngine.isCompletedToday(habit)) {
+                        count++;
+                    }
+                }
             }
-        };
+            return count;
+        });
     }
 
-    public LiveData<List<HabitCycle>> getTodayHabitsLiveData() {
+    // Getters
+    public LiveData<List<HabitCycle>> getHabitsLiveData() {
         return todayHabitsLiveData;
     }
 
-    public LiveData<String> getErrorMessageLiveData() {
-        return errorMessageLiveData;
+    // 为了兼容 StatsFragment，提供这个方法
+    public LiveData<List<HabitCycle>> getAllHabitsLiveData() {
+        return allHabitsLiveData;
     }
 
     public LiveData<Integer> getCompletedCountLiveData() {
@@ -61,88 +80,31 @@ public class TodayViewModel extends AndroidViewModel {
         return totalCountLiveData;
     }
 
-    public void loadTodayHabits() {
-        try {
-            // Remove old observer if exists
-            if (allHabitsLiveData != null && habitsObserver != null) {
-                allHabitsLiveData.removeObserver(habitsObserver);
-            }
-
-            allHabitsLiveData = habitRepository.getAllHabitCycles();
-            allHabitsLiveData.observeForever(habitsObserver);
-        } catch (Exception e) {
-            errorMessageLiveData.setValue("Failed to load habits: " + e.getMessage());
-        }
+    public LiveData<String> getErrorMessageLiveData() {
+        return errorMessageLiveData;
     }
 
-    private void processAndUpdateTodayHabits(List<HabitCycle> allHabits) {
-        List<HabitCycle> todayHabits = new ArrayList<>();
-        int completedCount = 0;
-        int totalCount = 0;
-
-        android.util.Log.d("TodayViewModel", "处理习惯列表，总数: " + (allHabits != null ? allHabits.size() : 0));
-
-        for (HabitCycle habit : allHabits) {
-            DayTask todayTask = HabitCycleEngine.getCurrentDayTask(habit);
-            DayTask displayTask = HabitCycleEngine.getCurrentDayTaskForDisplay(habit);
-
-            android.util.Log.d("TodayViewModel", "习惯: " + habit.getName() +
-                ", 当前任务: " + (displayTask != null ? displayTask.getTaskName() : "null") +
-                ", 完成状态: " + (displayTask != null ? displayTask.isCompleted() : "N/A"));
-
-            // Only count habits that have tasks for today
-            if (displayTask != null) {
-                totalCount++;
-                if (displayTask.isCompleted()) {
-                    completedCount++;
-                } else if (todayTask != null) {
-                    // Only add uncompleted tasks to the list
-                    todayHabits.add(habit);
-                }
-            }
-        }
-
-        android.util.Log.d("TodayViewModel", "待完成任务: " + todayHabits.size() + ", 已完成: " + completedCount + ", 总数: " + totalCount);
-
-        todayHabitsLiveData.setValue(todayHabits);
-        completedCountLiveData.setValue(completedCount);
-        totalCountLiveData.setValue(totalCount);
-    }
-
+    // 完成任务的操作
     public void completeTask(String habitId) {
         executor.execute(() -> {
             try {
-                android.util.Log.d("TodayViewModel", "开始完成任务: " + habitId);
-
-                // Use synchronous method to get habit from repository
+                // 使用同步方法获取习惯，确保数据最新
                 HabitCycle habitToComplete = habitRepository.getHabitCycleByIdSync(habitId);
 
                 if (habitToComplete != null) {
-                    android.util.Log.d("TodayViewModel", "找到习惯: " + habitToComplete.getName());
+                    // 计算今天是第几天
                     int currentDay = HabitCycleEngine.calculateCurrentDay(habitToComplete);
-                    android.util.Log.d("TodayViewModel", "当前天数: " + currentDay);
+
+                    // 调用 Repository 更新数据库
+                    // 注意：Repository 更新后，Room 会自动通知 allHabitsLiveData，
+                    // 进而自动触发上面的 Transformations，进度条就会自动变了！
                     habitRepository.completeDay(habitId, currentDay);
-                    android.util.Log.d("TodayViewModel", "完成任务成功");
                 } else {
-                    android.util.Log.e("TodayViewModel", "Habit not found: " + habitId);
                     errorMessageLiveData.postValue("Habit not found: " + habitId);
                 }
             } catch (Exception e) {
-                android.util.Log.e("TodayViewModel", "Failed to complete task: " + e.getMessage(), e);
                 errorMessageLiveData.postValue("Failed to complete task: " + e.getMessage());
             }
         });
-    }
-
-    @Override
-    protected void onCleared() {
-        super.onCleared();
-        if (allHabitsLiveData != null && habitsObserver != null) {
-            try {
-                allHabitsLiveData.removeObserver(habitsObserver);
-            } catch (Exception e) {
-                android.util.Log.e("TodayViewModel", "Error removing observer: " + e.getMessage());
-            }
-        }
     }
 }
