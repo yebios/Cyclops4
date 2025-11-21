@@ -21,6 +21,8 @@ import com.example.cyclops.adapter.HabitCycleAdapter;
 import com.example.cyclops.model.HabitCycle;
 import com.example.cyclops.viewmodel.TodayViewModel;
 
+import java.util.ArrayList;
+
 public class TodayFragment extends Fragment {
 
     private TodayViewModel todayViewModel;
@@ -54,7 +56,7 @@ public class TodayFragment extends Fragment {
     }
 
     private void setupRecyclerView() {
-        adapter = new HabitCycleAdapter(null, new HabitCycleAdapter.OnHabitClickListener() {
+        adapter = new HabitCycleAdapter(new ArrayList<>(), new HabitCycleAdapter.OnHabitClickListener() {
             @Override
             public void onHabitClick(HabitCycle habitCycle) {
                 openHabitDetail(habitCycle);
@@ -62,49 +64,40 @@ public class TodayFragment extends Fragment {
 
             @Override
             public void onCompleteClick(HabitCycle habitCycle) {
-                // 显示完成动画或反馈
-                showCompletionFeedback(habitCycle);
+                // 点击打卡
+                todayViewModel.completeTask(habitCycle.getId());
 
-                // 完成任务
-                if (todayViewModel != null) {
-                    todayViewModel.completeTask(habitCycle.getId());
-                }
+                // 显示提示
+                String msg = getString(R.string.checking_in_toast, habitCycle.getName());
+                Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
             }
         });
 
-        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         recyclerView.setAdapter(adapter);
-    }
-
-    private void showCompletionFeedback(HabitCycle habitCycle) {
-        // 可以在这里添加完成动画
-        Toast.makeText(getContext(), "已完成: " + habitCycle.getName(), Toast.LENGTH_SHORT).show();
+        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
     }
 
     private void observeViewModel() {
-        // 观察今日习惯列表
-        todayViewModel.getTodayHabitsLiveData().observe(getViewLifecycleOwner(), habits -> {
+        // [修复] 这里调用正确的方法名 getHabitsLiveData()
+        todayViewModel.getHabitsLiveData().observe(getViewLifecycleOwner(), habits -> {
             if (habits != null) {
                 adapter.updateData(habits);
-                android.util.Log.d("TodayFragment", "习惯列表更新: " + habits.size() + "个任务");
             }
         });
 
-        // 观察完成计数
-        todayViewModel.getCompletedCountLiveData().observe(getViewLifecycleOwner(), completedCount -> {
-            if (completedCount != null) {
-                tvCompletedCount.setText(String.valueOf(completedCount));
-                updateProgress();
-                android.util.Log.d("TodayFragment", "完成计数更新: " + completedCount);
+        // 观察已完成数量
+        todayViewModel.getCompletedCountLiveData().observe(getViewLifecycleOwner(), count -> {
+            if (count != null) {
+                tvCompletedCount.setText(String.valueOf(count));
+                updateProgressBar();
             }
         });
 
-        // 观察总任务数
-        todayViewModel.getTotalCountLiveData().observe(getViewLifecycleOwner(), totalCount -> {
-            if (totalCount != null) {
-                tvTotalCount.setText(String.valueOf(totalCount));
-                updateProgress();
-                android.util.Log.d("TodayFragment", "总任务数更新: " + totalCount);
+        // 观察总数量
+        todayViewModel.getTotalCountLiveData().observe(getViewLifecycleOwner(), count -> {
+            if (count != null) {
+                tvTotalCount.setText(String.valueOf(count));
+                updateProgressBar();
             }
         });
 
@@ -112,32 +105,23 @@ public class TodayFragment extends Fragment {
         todayViewModel.getErrorMessageLiveData().observe(getViewLifecycleOwner(), errorMessage -> {
             if (errorMessage != null && !errorMessage.isEmpty()) {
                 Toast.makeText(getContext(), errorMessage, Toast.LENGTH_SHORT).show();
-                android.util.Log.e("TodayFragment", "错误信息: " + errorMessage);
             }
         });
     }
 
-    private void updateProgress() {
-        Integer totalCount = todayViewModel.getTotalCountLiveData().getValue();
-        Integer completedCount = todayViewModel.getCompletedCountLiveData().getValue();
+    private void updateProgressBar() {
+        Integer completed = todayViewModel.getCompletedCountLiveData().getValue();
+        Integer total = todayViewModel.getTotalCountLiveData().getValue();
 
-        if (totalCount != null && completedCount != null) {
-            if (totalCount > 0) {
-                int progress = (completedCount * 100) / totalCount;
-                progressBar.setProgress(progress);
-                android.util.Log.d("TodayFragment", "更新进度: " + completedCount + "/" + totalCount + " = " + progress + "%");
-            } else {
-                progressBar.setProgress(0);
-                android.util.Log.d("TodayFragment", "更新进度: 0/0 = 0%");
-            }
+        if (completed != null && total != null && total > 0) {
+            int progress = (completed * 100) / total;
+            progressBar.setProgress(progress);
         } else {
             progressBar.setProgress(0);
-            android.util.Log.d("TodayFragment", "更新进度: 数据为空");
         }
     }
 
     private void openHabitDetail(HabitCycle habitCycle) {
-        // 打开习惯详情
         Intent intent = new Intent(getContext(), HabitDetailActivity.class);
         intent.putExtra("HABIT_ID", habitCycle.getId());
         startActivity(intent);

@@ -12,14 +12,16 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.cyclops.R;
+import com.example.cyclops.HabitCycleEngine; // 核心引擎，用于计算单个成功率
 import com.example.cyclops.model.HabitCycle;
-import com.example.cyclops.viewmodel.HabitViewModel; // 1. 改用 HabitViewModel
+import com.example.cyclops.viewmodel.HabitViewModel;
 
 import java.util.List;
+import java.util.Locale;
 
 public class StatsFragment extends Fragment {
 
-    private HabitViewModel habitViewModel; // 2. 变量类型更改
+    private HabitViewModel habitViewModel;
     private TextView tvTotalHabits;
     private TextView tvTotalCompletions;
     private TextView tvBestStreak;
@@ -36,7 +38,7 @@ public class StatsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        // 3. 获取 HabitViewModel 实例
+        // 获取 ViewModel
         habitViewModel = new ViewModelProvider(requireActivity()).get(HabitViewModel.class);
         observeViewModel();
     }
@@ -49,37 +51,48 @@ public class StatsFragment extends Fragment {
     }
 
     private void observeViewModel() {
-        // 4. 调用正确的方法 getHabitsLiveData()
+        // 观察所有习惯的数据变化
         habitViewModel.getHabitsLiveData().observe(getViewLifecycleOwner(), this::calculateAndShowStats);
     }
 
-    // 统计核心逻辑 (保持不变)
+    /**
+     * 计算并显示统计数据 (方案 A: 平均成功率)
+     */
     private void calculateAndShowStats(List<HabitCycle> habits) {
         if (habits == null) return;
 
         int totalHabitsCount = habits.size();
-        int grandTotalCompletions = 0; // 所有习惯的任务完成总数
-        int maxGlobalStreak = 0;       // 所有习惯中最高的连续记录
+        int grandTotalCompletions = 0; // 总循环完成次数
+        int maxGlobalStreak = 0;       // 最高连续记录
+        double sumOfSuccessRates = 0.0; // 所有习惯成功率的总和
 
         for (HabitCycle habit : habits) {
-            // 累加每个习惯的 totalCompletions (小任务完成数)
+            // 1. 累加循环次数 (完整循环数)
             grandTotalCompletions += habit.getTotalCompletions();
 
-            // 寻找最大的 bestStreak
+            // 2. 寻找最佳 Streak (在所有习惯中找最大的)
             if (habit.getBestStreak() > maxGlobalStreak) {
                 maxGlobalStreak = habit.getBestStreak();
             }
+
+            // 3. [方案A核心] 计算单个习惯的成功率并累加
+            // HabitCycleEngine.calculateSuccessRate 返回 0.0 ~ 100.0
+            double singleRate = HabitCycleEngine.calculateSuccessRate(habit);
+            sumOfSuccessRates += singleRate;
         }
 
-        // 计算成功率 (示例算法：为了展示效果，简单处理)
-        // 实际项目可根据 (完成数 / 预期天数) 计算
-        double successRate = totalHabitsCount > 0 ?
-                (grandTotalCompletions > 0 ? 100.0 : 0) : 0;
+        // 4. 计算平均成功率 = 总和 / 数量
+        double averageSuccessRate = 0.0;
+        if (totalHabitsCount > 0) {
+            averageSuccessRate = sumOfSuccessRates / totalHabitsCount;
+        }
 
         // 更新 UI
         tvTotalHabits.setText(String.valueOf(totalHabitsCount));
         tvTotalCompletions.setText(String.valueOf(grandTotalCompletions));
         tvBestStreak.setText(String.valueOf(maxGlobalStreak));
-        tvSuccessRate.setText(String.format("%.1f%%", successRate));
+
+        // 格式化显示 (保留1位小数，例如 85.5%)
+        tvSuccessRate.setText(String.format(Locale.getDefault(), "%.1f%%", averageSuccessRate));
     }
 }

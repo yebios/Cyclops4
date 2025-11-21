@@ -4,10 +4,13 @@ import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -37,6 +40,8 @@ public class DiscoverFragment extends Fragment {
     private TextView tvEmptyPopular;
     private TextView tvEmptyCategories;
 
+    private EditText etSearch; // [新增] 搜索框
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -51,6 +56,7 @@ public class DiscoverFragment extends Fragment {
         templateViewModel = new ViewModelProvider(this).get(TemplateViewModel.class);
 
         setupRecyclerViews();
+        setupSearchListener(); // [新增] 设置搜索监听
         observeViewModel();
     }
 
@@ -60,34 +66,33 @@ public class DiscoverFragment extends Fragment {
 
         tvEmptyPopular = view.findViewById(R.id.tv_empty_popular);
         tvEmptyCategories = view.findViewById(R.id.tv_empty_categories);
+
+        etSearch = view.findViewById(R.id.et_search); // [新增]
     }
 
     private void setupRecyclerViews() {
-        // 定义点击监听器
         TemplateAdapter.OnTemplateClickListener listener = new TemplateAdapter.OnTemplateClickListener() {
             @Override
             public void onTemplateClick(HabitTemplate template) {
-                // [新增] 点击卡片 -> 显示预览弹窗
                 showTemplatePreviewDialog(template);
             }
 
             @Override
             public void onImportClick(HabitTemplate template) {
-                // 点击按钮 -> 直接导入 (快捷操作)
                 importTemplate(template);
             }
         };
 
-        // 1. [修改] 热门模板 -> 改为双列网格
+        // 1. 热门模板 (横向)
         popularAdapter = new TemplateAdapter(new ArrayList<>(), listener);
-        // 使用 GridLayoutManager，2列
+        // 改回横向可能更好看，或者保持你喜欢的双列
+        // 这里我根据之前的优化保持双列网格
         GridLayoutManager popularGridManager = new GridLayoutManager(getContext(), 2);
         recyclerViewPopular.setLayoutManager(popularGridManager);
         recyclerViewPopular.setAdapter(popularAdapter);
-        // 禁用自身滚动，解决与 NestedScrollView 的冲突
         recyclerViewPopular.setNestedScrollingEnabled(false);
 
-        // 2. 全部模板 -> 也是双列网格
+        // 2. 全部模板 (双列网格) - 搜索结果主要在这里显示
         categoriesAdapter = new TemplateAdapter(new ArrayList<>(), listener);
         GridLayoutManager categoriesGridManager = new GridLayoutManager(getContext(), 2);
         recyclerViewCategories.setLayoutManager(categoriesGridManager);
@@ -95,8 +100,27 @@ public class DiscoverFragment extends Fragment {
         recyclerViewCategories.setNestedScrollingEnabled(false);
     }
 
+    // [新增] 搜索监听器
+    private void setupSearchListener() {
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // 当输入文字变化时，通知 ViewModel 过滤数据
+                if (templateViewModel != null) {
+                    templateViewModel.searchTemplates(s.toString());
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+    }
+
     private void observeViewModel() {
-        // 观察热门数据
+        // 热门数据
         templateViewModel.getPopularTemplatesLiveData().observe(getViewLifecycleOwner(), templates -> {
             if (templates != null) {
                 popularAdapter.updateData(templates);
@@ -104,7 +128,7 @@ public class DiscoverFragment extends Fragment {
             }
         });
 
-        // 观察全部数据
+        // 观察分类数据 (搜索结果会更新到这里)
         templateViewModel.getCategoryTemplatesLiveData().observe(getViewLifecycleOwner(), templates -> {
             if (templates != null) {
                 categoriesAdapter.updateData(templates);
@@ -112,7 +136,6 @@ public class DiscoverFragment extends Fragment {
             }
         });
 
-        // 观察导入结果消息
         templateViewModel.getImportMessageLiveData().observe(getViewLifecycleOwner(), message -> {
             if (message != null && !message.isEmpty()) {
                 Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
@@ -120,14 +143,11 @@ public class DiscoverFragment extends Fragment {
         });
     }
 
-    // [新增] 显示模板详情预览弹窗
     private void showTemplatePreviewDialog(HabitTemplate template) {
         if (getContext() == null) return;
 
-        // 1. 加载自定义布局
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_template_preview, null);
 
-        // 2. 绑定控件
         TextView tvCategory = dialogView.findViewById(R.id.tv_preview_category);
         TextView tvCycle = dialogView.findViewById(R.id.tv_preview_cycle);
         TextView tvTitle = dialogView.findViewById(R.id.tv_preview_title);
@@ -136,13 +156,11 @@ public class DiscoverFragment extends Fragment {
         Button btnClose = dialogView.findViewById(R.id.btn_preview_cancel);
         Button btnImport = dialogView.findViewById(R.id.btn_preview_import);
 
-        // 3. 填充数据
         tvCategory.setText(template.getCategory());
         tvCycle.setText(getString(R.string.template_cycle_days, template.getCycleLength()));
         tvTitle.setText(template.getName());
         tvDesc.setText(template.getDescription());
 
-        // 格式化任务列表
         StringBuilder tasksBuilder = new StringBuilder();
         if (template.getTasks() != null) {
             for (int i = 0; i < template.getTasks().size(); i++) {
@@ -157,17 +175,14 @@ public class DiscoverFragment extends Fragment {
         }
         tvTaskList.setText(tasksBuilder.toString());
 
-        // 4. 创建并显示 Dialog
         AlertDialog dialog = new AlertDialog.Builder(getContext())
                 .setView(dialogView)
                 .create();
 
-        // 设置背景透明，以便显示 CardView 的圆角
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
 
-        // 5. 按钮事件
         btnClose.setOnClickListener(v -> dialog.dismiss());
 
         btnImport.setOnClickListener(v -> {
@@ -191,8 +206,9 @@ public class DiscoverFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // [核心修复] 每次页面显示时刷新数据，确保语言切换生效
         if (templateViewModel != null) {
+            // 每次页面可见时，重置数据（清空搜索状态，重新加载语言）
+            etSearch.setText("");
             templateViewModel.refreshData();
         }
     }
