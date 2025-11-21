@@ -1,16 +1,21 @@
 package com.example.cyclops.view;
 
+import android.app.AlertDialog;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.cyclops.R;
@@ -24,13 +29,12 @@ public class DiscoverFragment extends Fragment {
 
     private TemplateViewModel templateViewModel;
     private RecyclerView recyclerViewPopular;
-    private RecyclerView recyclerViewRecent;
     private RecyclerView recyclerViewCategories;
+
     private TemplateAdapter popularAdapter;
-    private TemplateAdapter recentAdapter;
     private TemplateAdapter categoriesAdapter;
+
     private TextView tvEmptyPopular;
-    private TextView tvEmptyRecent;
     private TextView tvEmptyCategories;
 
     @Nullable
@@ -38,7 +42,6 @@ public class DiscoverFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_discover, container, false);
         initViews(view);
-        setupRecyclerViews();
         return view;
     }
 
@@ -46,71 +49,54 @@ public class DiscoverFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         templateViewModel = new ViewModelProvider(this).get(TemplateViewModel.class);
+
+        setupRecyclerViews();
         observeViewModel();
-        loadTemplates();
     }
 
     private void initViews(View view) {
         recyclerViewPopular = view.findViewById(R.id.recycler_view_popular);
-        recyclerViewRecent = view.findViewById(R.id.recycler_view_recent);
         recyclerViewCategories = view.findViewById(R.id.recycler_view_categories);
 
         tvEmptyPopular = view.findViewById(R.id.tv_empty_popular);
-        tvEmptyRecent = view.findViewById(R.id.tv_empty_recent);
         tvEmptyCategories = view.findViewById(R.id.tv_empty_categories);
     }
 
     private void setupRecyclerViews() {
-        // 热门模板
-        popularAdapter = new TemplateAdapter(new ArrayList<>(), new TemplateAdapter.OnTemplateClickListener() {
+        // 定义点击监听器
+        TemplateAdapter.OnTemplateClickListener listener = new TemplateAdapter.OnTemplateClickListener() {
             @Override
             public void onTemplateClick(HabitTemplate template) {
-                openTemplateDetail(template);
+                // [新增] 点击卡片 -> 显示预览弹窗
+                showTemplatePreviewDialog(template);
             }
 
             @Override
             public void onImportClick(HabitTemplate template) {
+                // 点击按钮 -> 直接导入 (快捷操作)
                 importTemplate(template);
             }
-        });
+        };
 
-        recyclerViewPopular.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
+        // 1. [修改] 热门模板 -> 改为双列网格
+        popularAdapter = new TemplateAdapter(new ArrayList<>(), listener);
+        // 使用 GridLayoutManager，2列
+        GridLayoutManager popularGridManager = new GridLayoutManager(getContext(), 2);
+        recyclerViewPopular.setLayoutManager(popularGridManager);
         recyclerViewPopular.setAdapter(popularAdapter);
+        // 禁用自身滚动，解决与 NestedScrollView 的冲突
+        recyclerViewPopular.setNestedScrollingEnabled(false);
 
-        // 最新模板
-        recentAdapter = new TemplateAdapter(new ArrayList<>(), new TemplateAdapter.OnTemplateClickListener() {
-            @Override
-            public void onTemplateClick(HabitTemplate template) {
-                openTemplateDetail(template);
-            }
-
-            @Override
-            public void onImportClick(HabitTemplate template) {
-                importTemplate(template);
-            }
-        });
-
-        recyclerViewRecent.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
-        recyclerViewRecent.setAdapter(recentAdapter);
-
-        // 分类模板
-        categoriesAdapter = new TemplateAdapter(new ArrayList<>(), new TemplateAdapter.OnTemplateClickListener() {
-            @Override
-            public void onTemplateClick(HabitTemplate template) {
-                openTemplateDetail(template);
-            }
-
-            @Override
-            public void onImportClick(HabitTemplate template) {
-                importTemplate(template);
-            }
-        });
-
-        recyclerViewCategories.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
+        // 2. 全部模板 -> 也是双列网格
+        categoriesAdapter = new TemplateAdapter(new ArrayList<>(), listener);
+        GridLayoutManager categoriesGridManager = new GridLayoutManager(getContext(), 2);
+        recyclerViewCategories.setLayoutManager(categoriesGridManager);
         recyclerViewCategories.setAdapter(categoriesAdapter);
+        recyclerViewCategories.setNestedScrollingEnabled(false);
     }
 
     private void observeViewModel() {
+        // 观察热门数据
         templateViewModel.getPopularTemplatesLiveData().observe(getViewLifecycleOwner(), templates -> {
             if (templates != null) {
                 popularAdapter.updateData(templates);
@@ -118,13 +104,7 @@ public class DiscoverFragment extends Fragment {
             }
         });
 
-        templateViewModel.getRecentTemplatesLiveData().observe(getViewLifecycleOwner(), templates -> {
-            if (templates != null) {
-                recentAdapter.updateData(templates);
-                updateEmptyState(tvEmptyRecent, templates.isEmpty());
-            }
-        });
-
+        // 观察全部数据
         templateViewModel.getCategoryTemplatesLiveData().observe(getViewLifecycleOwner(), templates -> {
             if (templates != null) {
                 categoriesAdapter.updateData(templates);
@@ -132,34 +112,88 @@ public class DiscoverFragment extends Fragment {
             }
         });
 
-        templateViewModel.getErrorMessageLiveData().observe(getViewLifecycleOwner(), errorMessage -> {
-            if (errorMessage != null && !errorMessage.isEmpty()) {
-                // 显示错误信息
-                // Toast.makeText(getContext(), errorMessage, Toast.LENGTH_SHORT).show();
+        // 观察导入结果消息
+        templateViewModel.getImportMessageLiveData().observe(getViewLifecycleOwner(), message -> {
+            if (message != null && !message.isEmpty()) {
+                Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    private void loadTemplates() {
-        templateViewModel.loadPopularTemplates();
-        templateViewModel.loadRecentTemplates();
-        templateViewModel.loadCategoryTemplates("健身");
+    // [新增] 显示模板详情预览弹窗
+    private void showTemplatePreviewDialog(HabitTemplate template) {
+        if (getContext() == null) return;
+
+        // 1. 加载自定义布局
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_template_preview, null);
+
+        // 2. 绑定控件
+        TextView tvCategory = dialogView.findViewById(R.id.tv_preview_category);
+        TextView tvCycle = dialogView.findViewById(R.id.tv_preview_cycle);
+        TextView tvTitle = dialogView.findViewById(R.id.tv_preview_title);
+        TextView tvDesc = dialogView.findViewById(R.id.tv_preview_desc);
+        TextView tvTaskList = dialogView.findViewById(R.id.tv_preview_task_list);
+        Button btnClose = dialogView.findViewById(R.id.btn_preview_cancel);
+        Button btnImport = dialogView.findViewById(R.id.btn_preview_import);
+
+        // 3. 填充数据
+        tvCategory.setText(template.getCategory());
+        tvCycle.setText(getString(R.string.template_cycle_days, template.getCycleLength()));
+        tvTitle.setText(template.getName());
+        tvDesc.setText(template.getDescription());
+
+        // 格式化任务列表
+        StringBuilder tasksBuilder = new StringBuilder();
+        if (template.getTasks() != null) {
+            for (int i = 0; i < template.getTasks().size(); i++) {
+                String taskName = template.getTasks().get(i);
+                tasksBuilder.append(getString(R.string.day_format, (i + 1)))
+                        .append(": ")
+                        .append(taskName);
+                if (i < template.getTasks().size() - 1) {
+                    tasksBuilder.append("\n");
+                }
+            }
+        }
+        tvTaskList.setText(tasksBuilder.toString());
+
+        // 4. 创建并显示 Dialog
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setView(dialogView)
+                .create();
+
+        // 设置背景透明，以便显示 CardView 的圆角
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+
+        // 5. 按钮事件
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+
+        btnImport.setOnClickListener(v -> {
+            importTemplate(template);
+            dialog.dismiss();
+        });
+
+        dialog.show();
     }
 
     private void updateEmptyState(TextView textView, boolean isEmpty) {
-        textView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
-    }
-
-    private void openTemplateDetail(HabitTemplate template) {
-        // 打开模板详情
-        // Intent intent = new Intent(getContext(), TemplateDetailActivity.class);
-        // intent.putExtra("TEMPLATE_ID", template.getId());
-        // startActivity(intent);
+        if (textView != null) {
+            textView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void importTemplate(HabitTemplate template) {
         templateViewModel.importTemplate(template);
-        // 显示导入成功提示
-        // Toast.makeText(getContext(), "模板导入成功！", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // [核心修复] 每次页面显示时刷新数据，确保语言切换生效
+        if (templateViewModel != null) {
+            templateViewModel.refreshData();
+        }
     }
 }

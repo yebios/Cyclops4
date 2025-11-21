@@ -1,182 +1,203 @@
 package com.example.cyclops.viewmodel;
 
+import android.app.Application;
+
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
 
+import com.example.cyclops.R;
+import com.example.cyclops.model.DayTask;
 import com.example.cyclops.model.HabitCycle;
 import com.example.cyclops.model.HabitTemplate;
-import com.example.cyclops.model.DayTask;
 import com.example.cyclops.repository.HabitRepository;
-import com.example.cyclops.repository.HabitRepositoryImpl;
+import com.example.cyclops.repository.RoomHabitRepository;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class TemplateViewModel extends ViewModel {
+public class TemplateViewModel extends AndroidViewModel {
 
     private HabitRepository habitRepository;
     private MutableLiveData<List<HabitTemplate>> popularTemplatesLiveData;
     private MutableLiveData<List<HabitTemplate>> recentTemplatesLiveData;
     private MutableLiveData<List<HabitTemplate>> categoryTemplatesLiveData;
-    private MutableLiveData<String> errorMessageLiveData;
+    private MutableLiveData<String> importMessageLiveData;
 
-    public TemplateViewModel() {
-        this.habitRepository = HabitRepositoryImpl.getInstance();
+    public TemplateViewModel(Application application) {
+        super(application);
+        this.habitRepository = RoomHabitRepository.getInstance(application);
         this.popularTemplatesLiveData = new MutableLiveData<>();
         this.recentTemplatesLiveData = new MutableLiveData<>();
         this.categoryTemplatesLiveData = new MutableLiveData<>();
-        this.errorMessageLiveData = new MutableLiveData<>();
+        this.importMessageLiveData = new MutableLiveData<>();
+
+        // 初始加载
+        refreshData();
     }
 
-    public LiveData<List<HabitTemplate>> getPopularTemplatesLiveData() {
-        return popularTemplatesLiveData;
+    public LiveData<List<HabitTemplate>> getPopularTemplatesLiveData() { return popularTemplatesLiveData; }
+    public LiveData<List<HabitTemplate>> getRecentTemplatesLiveData() { return recentTemplatesLiveData; }
+    public LiveData<List<HabitTemplate>> getCategoryTemplatesLiveData() { return categoryTemplatesLiveData; }
+    public LiveData<String> getImportMessageLiveData() { return importMessageLiveData; }
+
+    // [新增] 刷新数据的方法，供 Fragment 调用
+    public void refreshData() {
+        loadPopularTemplates();
+        loadRecentTemplates();
+        loadAllTemplatesCombined();
     }
 
-    public LiveData<List<HabitTemplate>> getRecentTemplatesLiveData() {
-        return recentTemplatesLiveData;
+    // 辅助方法：简化 getString 调用
+    private String getString(int resId) {
+        return getApplication().getString(resId);
     }
 
-    public LiveData<List<HabitTemplate>> getCategoryTemplatesLiveData() {
-        return categoryTemplatesLiveData;
+    private void loadPopularTemplates() {
+        List<HabitTemplate> templates = new ArrayList<>();
+
+        // 1. Fitness
+        List<String> fitnessTasks = new ArrayList<>();
+        fitnessTasks.add(getString(R.string.task_fitness_d1));
+        fitnessTasks.add(getString(R.string.task_fitness_d2));
+        fitnessTasks.add(getString(R.string.task_fitness_d3));
+        fitnessTasks.add(getString(R.string.task_fitness_d4));
+        templates.add(new HabitTemplate(
+                "1",
+                getString(R.string.tmpl_fitness_title),
+                getString(R.string.tmpl_fitness_desc),
+                getString(R.string.tmpl_fitness_cat),
+                4, fitnessTasks, 1250, 4.8f
+        ));
+
+        // 2. Sleep
+        List<String> sleepTasks = new ArrayList<>();
+        sleepTasks.add(getString(R.string.task_sleep_d1));
+        sleepTasks.add(getString(R.string.task_sleep_d2));
+        sleepTasks.add(getString(R.string.task_sleep_d3));
+        templates.add(new HabitTemplate(
+                "2",
+                getString(R.string.tmpl_sleep_title),
+                getString(R.string.tmpl_sleep_desc),
+                getString(R.string.tmpl_sleep_cat),
+                3, sleepTasks, 980, 4.6f
+        ));
+
+        // 5. Morning
+        List<String> morningTasks = new ArrayList<>();
+        morningTasks.add(getString(R.string.task_morning_d1));
+        morningTasks.add(getString(R.string.task_morning_d2));
+        morningTasks.add(getString(R.string.task_morning_d3));
+        templates.add(new HabitTemplate(
+                "5",
+                getString(R.string.tmpl_morning_title),
+                getString(R.string.tmpl_morning_desc),
+                getString(R.string.tmpl_morning_cat),
+                3, morningTasks, 850, 4.7f
+        ));
+
+        popularTemplatesLiveData.setValue(templates);
     }
 
-    public LiveData<String> getErrorMessageLiveData() {
-        return errorMessageLiveData;
+    private void loadRecentTemplates() {
+        List<HabitTemplate> templates = new ArrayList<>();
+
+        // 3. Coding
+        List<String> codingTasks = new ArrayList<>();
+        codingTasks.add(getString(R.string.task_coding_d1));
+        codingTasks.add(getString(R.string.task_coding_d2));
+        codingTasks.add(getString(R.string.task_coding_d3));
+        templates.add(new HabitTemplate(
+                "3",
+                getString(R.string.tmpl_coding_title),
+                getString(R.string.tmpl_coding_desc),
+                getString(R.string.tmpl_coding_cat),
+                3, codingTasks, 45, 4.9f
+        ));
+
+        // 4. Water
+        List<String> waterTasks = new ArrayList<>();
+        waterTasks.add(getString(R.string.task_water_d1));
+        waterTasks.add(getString(R.string.task_water_d2));
+        templates.add(new HabitTemplate(
+                "4",
+                getString(R.string.tmpl_water_title),
+                getString(R.string.tmpl_water_desc),
+                getString(R.string.tmpl_water_cat),
+                2, waterTasks, 120, 4.2f
+        ));
+
+        // 6. Focus
+        List<String> focusTasks = new ArrayList<>();
+        focusTasks.add(getString(R.string.task_focus_d1));
+        focusTasks.add(getString(R.string.task_focus_d2));
+        focusTasks.add(getString(R.string.task_focus_d3));
+        templates.add(new HabitTemplate(
+                "6",
+                getString(R.string.tmpl_focus_title),
+                getString(R.string.tmpl_focus_desc),
+                getString(R.string.tmpl_focus_cat),
+                3, focusTasks, 340, 4.9f
+        ));
+
+        // 7. Detox
+        List<String> detoxTasks = new ArrayList<>();
+        detoxTasks.add(getString(R.string.task_detox_d1));
+        detoxTasks.add(getString(R.string.task_detox_d2));
+        templates.add(new HabitTemplate(
+                "7",
+                getString(R.string.tmpl_detox_title),
+                getString(R.string.tmpl_detox_desc),
+                getString(R.string.tmpl_detox_cat),
+                2, detoxTasks, 210, 4.5f
+        ));
+
+        // 8. Reading
+        List<String> readTasks = new ArrayList<>();
+        readTasks.add(getString(R.string.task_read_d1));
+        readTasks.add(getString(R.string.task_read_d2));
+        templates.add(new HabitTemplate(
+                "8",
+                getString(R.string.tmpl_read_title),
+                getString(R.string.tmpl_read_desc),
+                getString(R.string.tmpl_read_cat),
+                2, readTasks, 500, 4.8f
+        ));
+
+        recentTemplatesLiveData.setValue(templates);
     }
 
-    public void loadPopularTemplates() {
-        try {
-            List<HabitTemplate> popularTemplates = getSamplePopularTemplates();
-            popularTemplatesLiveData.setValue(popularTemplates);
-        } catch (Exception e) {
-            errorMessageLiveData.setValue("加载热门模板失败: " + e.getMessage());
+    private void loadAllTemplatesCombined() {
+        List<HabitTemplate> allTemplates = new ArrayList<>();
+        if (popularTemplatesLiveData.getValue() != null) {
+            allTemplates.addAll(popularTemplatesLiveData.getValue());
         }
-    }
-
-    public void loadRecentTemplates() {
-        try {
-            List<HabitTemplate> recentTemplates = getSampleRecentTemplates();
-            recentTemplatesLiveData.setValue(recentTemplates);
-        } catch (Exception e) {
-            errorMessageLiveData.setValue("加载最新模板失败: " + e.getMessage());
+        if (recentTemplatesLiveData.getValue() != null) {
+            allTemplates.addAll(recentTemplatesLiveData.getValue());
         }
-    }
-
-    public void loadCategoryTemplates(String category) {
-        try {
-            List<HabitTemplate> categoryTemplates = getSampleCategoryTemplates(category);
-            categoryTemplatesLiveData.setValue(categoryTemplates);
-        } catch (Exception e) {
-            errorMessageLiveData.setValue("加载分类模板失败: " + e.getMessage());
-        }
+        categoryTemplatesLiveData.setValue(allTemplates);
     }
 
     public void importTemplate(HabitTemplate template) {
-        try {
-            // 将模板转换为习惯循环并添加到用户的习惯中
-            HabitCycle habitCycle = convertTemplateToHabitCycle(template);
-            habitRepository.addHabitCycle(habitCycle);
-        } catch (Exception e) {
-            errorMessageLiveData.setValue("导入模板失败: " + e.getMessage());
-        }
-    }
+        if (template == null) return;
 
-    private HabitCycle convertTemplateToHabitCycle(HabitTemplate template) {
-        HabitCycle habitCycle = new HabitCycle();
-        habitCycle.setName(template.getName());
-        habitCycle.setDescription(template.getDescription());
-        habitCycle.setCycleLength(template.getCycleLength());
+        HabitCycle newHabit = new HabitCycle();
+        newHabit.setName(template.getName());
+        newHabit.setDescription(template.getDescription());
+        newHabit.setCycleLength(template.getCycleLength());
+        newHabit.setUserId("");
 
         List<DayTask> dayTasks = new ArrayList<>();
-        for (String task : template.getTasks()) {
-            dayTasks.add(new DayTask(dayTasks.size() + 1, task));
+        if (template.getTasks() != null) {
+            for (int i = 0; i < template.getTasks().size(); i++) {
+                String taskName = template.getTasks().get(i);
+                dayTasks.add(new DayTask(i + 1, taskName));
+            }
         }
-        habitCycle.setDayTasks(dayTasks);
+        newHabit.setDayTasks(dayTasks);
 
-        return habitCycle;
-    }
+        habitRepository.addHabitCycle(newHabit);
 
-    private List<HabitTemplate> getSamplePopularTemplates() {
-        List<HabitTemplate> templates = new ArrayList<>();
-
-        // 示例模板1：健身计划
-        List<String> fitnessTasks = new ArrayList<>();
-        fitnessTasks.add("胸部训练：卧推、飞鸟");
-        fitnessTasks.add("背部训练：引体向上、划船");
-        fitnessTasks.add("腿部训练：深蹲、硬拉");
-        fitnessTasks.add("休息日或轻度有氧");
-
-        templates.add(new HabitTemplate(
-                "1", "3天健身循环", "科学的肌肉训练计划",
-                "健身", 4, fitnessTasks, 1500, 4.8f
-        ));
-
-        // 示例模板2：晨间习惯
-        List<String> morningTasks = new ArrayList<>();
-        morningTasks.add("冥想5分钟 + 喝水");
-        morningTasks.add("晨间阅读15分钟");
-        morningTasks.add("简单拉伸运动");
-        morningTasks.add("计划今日任务");
-        morningTasks.add("感恩日记");
-
-        templates.add(new HabitTemplate(
-                "2", "高效晨间习惯", "开启高效一天",
-                "生活", 5, morningTasks, 890, 4.6f
-        ));
-
-        return templates;
-    }
-
-    private List<HabitTemplate> getSampleRecentTemplates() {
-        List<HabitTemplate> templates = new ArrayList<>();
-
-        // 示例模板：语言学习
-        List<String> languageTasks = new ArrayList<>();
-        languageTasks.add("新词汇学习（20个）");
-        languageTasks.add("语法练习");
-        languageTasks.add("听力训练");
-        languageTasks.add("口语练习");
-        languageTasks.add("阅读文章");
-        languageTasks.add("写作练习");
-        languageTasks.add("复习日");
-
-        templates.add(new HabitTemplate(
-                "3", "7天语言学习", "全面提升语言能力",
-                "学习", 7, languageTasks, 320, 4.7f
-        ));
-
-        // 示例模板：编程学习
-        List<String> codingTasks = new ArrayList<>();
-        codingTasks.add("算法练习");
-        codingTasks.add("项目开发");
-        codingTasks.add("技术文档阅读");
-        codingTasks.add("代码重构练习");
-
-        templates.add(new HabitTemplate(
-                "4", "编程技能提升", "系统化编程训练",
-                "学习", 4, codingTasks, 210, 4.5f
-        ));
-
-        return templates;
-    }
-
-    private List<HabitTemplate> getSampleCategoryTemplates(String category) {
-        List<HabitTemplate> templates = new ArrayList<>();
-
-        if ("健身".equals(category)) {
-            List<String> yogaTasks = new ArrayList<>();
-            yogaTasks.add("基础体式练习");
-            yogaTasks.add("流瑜伽序列");
-            yogaTasks.add("阴瑜伽放松");
-            yogaTasks.add("呼吸与冥想");
-
-            templates.add(new HabitTemplate(
-                    "5", "瑜伽入门计划", "身心平衡的瑜伽练习",
-                    "健身", 4, yogaTasks, 430, 4.9f
-            ));
-        }
-
-        return templates;
+        importMessageLiveData.setValue(getApplication().getString(R.string.toast_import_success));
     }
 }
